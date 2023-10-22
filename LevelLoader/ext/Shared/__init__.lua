@@ -23,20 +23,20 @@ local m_LazyLoadedCount = 0
 ---case that there is a gamemode map file, and in case the map file does not exist or the path does 
 ---not have an entry it returns @p_Path
 ---@param p_Path string
----@return string
+---@return string?
 local function GetBundlePath(p_Path)
 	local _, s_BundlesMapJson = pcall(require, '__shared/Levels/BundlesMap.lua')
-	
+
 	if not s_BundlesMapJson then
-		return p_Path
+		return nil
 	end
 
 	local s_BundlesMap = json.decode(s_BundlesMapJson)
 
 	-- Replace spaces in case of custom gamemodes with spaces in their names
 	p_Path = p_Path:gsub(' ', '_')
-	
-	
+
+
 	if s_BundlesMap and s_BundlesMap[p_Path] then
 		print('Found custom bundle ' .. s_BundlesMap[p_Path] .. ' for gamemode ' .. p_Path .. ' in bundle map file')
 		return s_BundlesMap[p_Path]
@@ -50,8 +50,10 @@ end
 ---@return table|nil
 local function GetLevelRODMap(p_LevelName, p_GameModeName)
 	p_LevelName = p_LevelName:gsub(".*/", "")
-	
+
 	local s_FileName = GetBundlePath(p_LevelName .. '/' .. p_GameModeName)
+
+	if not s_FileName then return end
 
 	-- File name uses _ instead of /
 	s_FileName = s_FileName:gsub('/', '_')
@@ -100,7 +102,7 @@ Events:Subscribe('Level:LoadResources', function(p_LevelName, p_GameMode, p_IsDe
 
 	for l_PartitionGuid, l_Instances in pairs(m_LevelRODMap) do
 		for _, l_InstanceGuid in ipairs(l_Instances) do
-			ResourceManager:RegisterInstanceLoadHandlerOnce(Guid(l_PartitionGuid), Guid(l_InstanceGuid), function(p_Instance) 
+			ResourceManager:RegisterInstanceLoadHandlerOnce(Guid(l_PartitionGuid), Guid(l_InstanceGuid), function(p_Instance)
 				p_Instance = _G[p_Instance.typeInfo.name](p_Instance)
 				p_Instance:MakeWritable()
 				p_Instance.excluded = true
@@ -133,7 +135,7 @@ local function _PatchLevel(p_LevelName)
 	local s_SWROD = SubWorldReferenceObjectData(Guid('6a724d44-4efd-4f7e-9249-2230121d7ecc'))
 
 	local s_Path = GetBundlePath(p_LevelName:gsub(".*/", "") .. '/' .. SharedUtils:GetCurrentGameMode())
-	
+
 	s_SWROD.bundleName = BUNDLE_PREFIX .. '/' .. s_Path
 	s_SWROD.blueprintTransform = LinearTransform()
 	s_SWROD.blueprint = nil
@@ -172,6 +174,8 @@ local function _PatchLevel(p_LevelName)
 
 	s_Data.linkConnections:add(s_LinkConnection)
 	s_Data.objects:add(s_SWROD)
+
+	ResourceManager:AlwaysClearGameCompartment(true)
 	print('Patched level')
 end
 
@@ -180,34 +184,30 @@ Events:Subscribe('Partition:Loaded', function(p_Partition)
 
 	if not s_LevelName then return end
 
-	if p_Partition.name == s_LevelName:lower() then
-		print('Patching level')
+	if p_Partition.name ~= s_LevelName:lower() then return end
 
-		local s_LevelData = LevelData(p_Partition.primaryInstance)
+	-- Level + GameMode not supported
+	if not GetBundlePath(s_LevelName:gsub(".*/", "") .. '/' .. SharedUtils:GetCurrentGameMode()) then return end
 
-		for _, l_Object in ipairs(s_LevelData.objects) do
-			l_Object = _G[l_Object.typeInfo.name](l_Object)
+	print('Patching level')
 
-			if l_Object.blueprint and l_Object.blueprint.isLazyLoaded then
-				m_LazyLoadedCount = m_LazyLoadedCount + 1
-				print("LazyLoadedCount " .. m_LazyLoadedCount)
-				
-				l_Object.blueprint:RegisterLoadHandlerOnce(function (p_Instance)
-					m_LazyLoadedCount = m_LazyLoadedCount - 1
-					if m_LazyLoadedCount == 0 then _PatchLevel(s_LevelName) end
-				end)
-			end
+	local s_LevelData = LevelData(p_Partition.primaryInstance)
+
+	for _, l_Object in ipairs(s_LevelData.objects) do
+		l_Object = _G[l_Object.typeInfo.name](l_Object)
+
+		if l_Object.blueprint and l_Object.blueprint.isLazyLoaded then
+			m_LazyLoadedCount = m_LazyLoadedCount + 1
+			print("LazyLoadedCount " .. m_LazyLoadedCount)
+
+			l_Object.blueprint:RegisterLoadHandlerOnce(function (p_Instance)
+				m_LazyLoadedCount = m_LazyLoadedCount - 1
+				if m_LazyLoadedCount == 0 then _PatchLevel(s_LevelName) end
+			end)
 		end
-
-		if m_LazyLoadedCount == 0 then _PatchLevel(s_LevelName) end
 	end
-end)
 
--- Remove all DataContainer references and reset vars
-Events:Subscribe('Level:Destroy', function()
-	-- TODO: remove all custom objects from level registry and leveldata if next round is
-	-- the same map but a different save, once that is implemented. If it's a different map
-	-- there is no need to clear anything, as the leveldata will be unloaded and a new one loaded
+	if m_LazyLoadedCount == 0 then _PatchLevel(s_LevelName) end
 end)
 
 -- Increase timeout 
@@ -228,4 +228,3 @@ ResourceManager:RegisterInstanceLoadHandler(Guid('C4DCACFF-ED8F-BC87-F647-0BC8AC
 	p_Instance.timeoutTime = math.max(Config.LOADING_TIMEOUT, p_Instance.timeoutTime or 0)
 	print("Changed ServerSettings")
 end)
-
