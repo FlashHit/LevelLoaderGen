@@ -225,11 +225,15 @@ def generate_ebx_json(in_dir: str, out_dir: str):
 		# Save the gamemodes that this bundle will be loaded in a new
 		# lua map: key -> map+gamemode loaded, value -> bundle to load
 		# Basically it inverts the provided gamemode map
+		bundle_path = json_save['header']['mapName'] + '/' + json_save['header']['gameModeName']
 		if gamemode_map:
-			bundle_path = json_save['header']['mapName'] + '/' + json_save['header']['gameModeName']
 			if bundle_path in gamemode_map:
 				for x in gamemode_map[bundle_path]:
 					bundles_lua_map[x] = bundle_path
+
+		# Force at least this map+gamemode to the lua map, so that lua file exists always.
+		# This lets us skip map+gamemodes that don't need this.
+		bundles_lua_map[bundle_path] = bundle_path
 
 		bundle_name = BUNDLE_PREFIX + "/" + json_save['header']['mapName'] + '/' + json_save['header']['gameModeName']
 		partition_name = bundle_name.lower()
