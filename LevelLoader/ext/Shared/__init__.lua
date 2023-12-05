@@ -42,7 +42,7 @@ local function GetBundlePath(p_Path)
 		return s_BundlesMap[p_Path]
 	end
 
-	return p_Path
+	return nil
 end
 
 ---@param p_LevelName string
