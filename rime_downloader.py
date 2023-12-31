@@ -4,7 +4,7 @@ from urllib.request import urlopen
 from zipfile import ZipFile
 
 # TODO: change this once there is an official download url
-RIME_URL = "https://i.nofate.me/36goiuRT0V1fZWd.zip"
+RIME_URL = "https://i.nofate.me/v5NkllNO25ExZSb4YeC7ygy.zip"
 
 
 def get_path():
